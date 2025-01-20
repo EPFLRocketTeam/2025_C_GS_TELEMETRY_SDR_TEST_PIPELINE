@@ -1,0 +1,678 @@
+options:
+  parameters:
+    author: ''
+    catch_exceptions: 'True'
+    category: '[GRC Hier Blocks]'
+    cmake_opt: ''
+    comment: ''
+    copyright: ''
+    description: ''
+    gen_cmake: 'On'
+    gen_linking: dynamic
+    generate_options: qt_gui
+    hier_block_src_path: '.:'
+    id: reception_lora
+    max_nouts: '0'
+    output_language: python
+    placement: (0,0)
+    qt_qss_theme: ''
+    realtime_scheduling: ''
+    run: 'True'
+    run_command: '{python} -u {filename}'
+    run_options: prompt
+    sizing_mode: fixed
+    thread_safe_setters: ''
+    title: LoRa Packet Decoder
+    window_size: (1000,1000)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 28.0]
+    rotation: 0
+    state: enabled
+
+blocks:
+- name: samp_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: 250e3
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 116.0]
+    rotation: 0
+    state: enabled
+- name: epy_block_0
+  id: epy_block
+  parameters:
+    _source_code: "import numpy as np\nfrom gnuradio import gr\nimport struct\n\n\
+      ##############################################################################\n\
+      # Parser functions for each packet type\n##############################################################################\n\
+      \ndef parse_gse_downlink(payload: bytes):\n    \"\"\"\n    GSE Downlink packet.\n\
+      \    struct PacketGSE_downlink {\n        float tankPressure;      // 4 bytes\n\
+      \        float tankTemperature;   // 4 bytes\n        float fillingPressure;\
+      \   // 4 bytes\n        GSE_cmd_status status;   // 2 bytes (fillingN2O + vent)\n\
+      \        bool disconnectActive;   // 1 byte\n        int32_t loadcellRaw;  \
+      \   // 4 bytes\n    } => total 19 bytes (packed)\n    \"\"\"\n    fmt = '<fffBBBi'\
+      \  # 3 floats, 2 bytes, 1 byte (bool), 1 int32\n    try:\n        (\n      \
+      \      tankPressure,\n            tankTemperature,\n            fillingPressure,\n\
+      \            fillingN2O,\n            vent,\n            disconnectActive,\n\
+      \            loadcellRaw\n        ) = struct.unpack(fmt, payload)\n\n      \
+      \  return {\n            'tankPressure':       tankPressure,\n            'tankTemperature':\
+      \    tankTemperature,\n            'fillingPressure':    fillingPressure,\n\
+      \            'fillingN2O':         fillingN2O,\n            'vent':        \
+      \       vent,\n            'disconnectActive':   bool(disconnectActive),\n \
+      \           'loadcellRaw':        loadcellRaw\n        }\n    except struct.error\
+      \ as e:\n        print(f\"Error unpacking GSE_downlink: {e}\")\n        return\
+      \ None\n\n\ndef parse_av_uplink(payload: bytes):\n    \"\"\"\n    AV Uplink\
+      \ packet (e.g., GS_CMD).\n    struct av_uplink_t {\n        uint8_t order_id;\
+      \    \n        uint8_t order_value; \n    } => total 2 bytes\n    \"\"\"\n \
+      \   fmt = '<BB'\n    try:\n        (order_id, order_value) = struct.unpack(fmt,\
+      \ payload)\n        return {\n            'order_id':    order_id,\n       \
+      \     'order_value': order_value\n        }\n    except struct.error as e:\n\
+      \        print(f\"Error unpacking av_uplink: {e}\")\n        return None\n\n\
+      \ndef parse_av_downlink(payload: bytes):\n    \"\"\"\n    AV Downlink packet\
+      \ (CAPSULE_ID = AV_TELEMETRY).\n    (See PacketDefinition_Firehorn.h for completeness,\
+      \ size = 99 bytes)\n    \"\"\"\n    fmt = '<II21f6BB'\n    try:\n        fields\
+      \ = struct.unpack(fmt, payload)\n        # Break them out for clarity\n    \
+      \    packet_nbr         = fields[0]\n        timestamp          = fields[1]\n\
+      \        gnss_lon           = fields[2]\n        gnss_lat           = fields[3]\n\
+      \        gnss_alt           = fields[4]\n        gnss_vertical_speed= fields[5]\n\
+      \        N2_pressure        = fields[6]\n        fuel_pressure      = fields[7]\n\
+      \        LOX_pressure       = fields[8]\n        igniter_pressure   = fields[9]\n\
+      \        LOX_inj_pressure   = fields[10]\n        fuel_inj_pressure  = fields[11]\n\
+      \        chamber_pressure   = fields[12]\n        fuel_level         = fields[13]\n\
+      \        LOX_level          = fields[14]\n        N2_temp            = fields[15]\n\
+      \        fuel_temp          = fields[16]\n        LOX_temp           = fields[17]\n\
+      \        igniter_temp       = fields[18]\n        fuel_inj_temp      = fields[19]\n\
+      \        fuel_inj_cool_temp = fields[20]\n        LOX_inj_temp       = fields[21]\n\
+      \        engine_temp        = fields[22]\n        igniter_LOX        = fields[23]\n\
+      \        igniter_fuel       = fields[24]\n        main_LOX           = fields[25]\n\
+      \        main_fuel          = fields[26]\n        vent_LOX           = fields[27]\n\
+      \        vent_fuel          = fields[28]\n        av_state           = fields[29]\n\
+      \n        return {\n            'packet_nbr':          packet_nbr,\n       \
+      \     'timestamp':           timestamp,\n            'gnss_lon':           \
+      \ gnss_lon,\n            'gnss_lat':            gnss_lat,\n            'gnss_alt':\
+      \            gnss_alt,\n            'gnss_vertical_speed': gnss_vertical_speed,\n\
+      \            'N2_pressure':         N2_pressure,\n            'fuel_pressure':\
+      \       fuel_pressure,\n            'LOX_pressure':        LOX_pressure,\n \
+      \           'igniter_pressure':    igniter_pressure,\n            'LOX_inj_pressure':\
+      \    LOX_inj_pressure,\n            'fuel_inj_pressure':   fuel_inj_pressure,\n\
+      \            'chamber_pressure':    chamber_pressure,\n            'fuel_level':\
+      \          fuel_level,\n            'LOX_level':           LOX_level,\n    \
+      \        'N2_temp':             N2_temp,\n            'fuel_temp':         \
+      \  fuel_temp,\n            'LOX_temp':            LOX_temp,\n            'igniter_temp':\
+      \        igniter_temp,\n            'fuel_inj_temp':       fuel_inj_temp,\n\
+      \            'fuel_inj_cool_temp':  fuel_inj_cool_temp,\n            'LOX_inj_temp':\
+      \        LOX_inj_temp,\n            'engine_temp':         engine_temp,\n  \
+      \          'engine_state': {\n                'igniter_LOX':  igniter_LOX,\n\
+      \                'igniter_fuel': igniter_fuel,\n                'main_LOX':\
+      \     main_LOX,\n                'main_fuel':    main_fuel,\n              \
+      \  'vent_LOX':     vent_LOX,\n                'vent_fuel':    vent_fuel\n  \
+      \          },\n            'av_state': av_state\n        }\n\n    except struct.error\
+      \ as e:\n        print(f\"Error unpacking av_downlink: {e}\")\n        return\
+      \ None\n\n\n##############################################################################\n\
+      # A lookup table that maps packet IDs (from the transmitter) to:\n#   (human-readable\
+      \ name, parser function, expected_payload_size)\n##############################################################################\n\
+      \ncapsule_info = {\n    # ID 0x01 => GSE Downlink (19 bytes)\n    0x01: (\"\
+      GSE_TELEMETRY\", parse_gse_downlink, 19),\n\n    # ID 0x0A => AV Uplink (2 bytes)\n\
+      \    0x0A: (\"GS_CMD\", parse_av_uplink, 2),\n\n    # AV Downlink with ID 0x08:\n\
+      \    0x08: (\"AV_TELEMETRY\", parse_av_downlink, 99),\n}\n\n\n##############################################################################\n\
+      # Main GNURadio block\n##############################################################################\n\
+      \nclass gse_downlink_decoder(gr.sync_block):\n    \"\"\"\n    Example GNURadio\
+      \ block that detects Firehorn packets and\n    decodes them based on the PacketDefinition.h\
+      \ structures.\n    \"\"\"\n\n    def __init__(self):\n        gr.sync_block.__init__(\n\
+      \            self,\n            name='Firehorn Packet Decoder',\n          \
+      \  in_sig=[np.uint8],\n            out_sig=[]\n        )\n\n        # State\
+      \ machine variables\n        self.state = 'PREAMBLE_A'\n        self.buffer\
+      \ = []\n        self.packet_id = None\n        self.length = None\n        self.bytes_received\
+      \ = 0\n\n    def work(self, input_items, output_items):\n        in0 = input_items[0]\n\
+      \n        # Debug print\n        print(f\"Received Bytes: {' '.join(f'{byte:02x}'\
+      \ for byte in in0)}\")\n\n        for byte in in0:\n            if self.state\
+      \ == 'PREAMBLE_A':\n                # Look for first preamble byte (0xFF)\n\
+      \                if byte == 0xFF:\n                    self.state = 'PREAMBLE_B'\n\
+      \n            elif self.state == 'PREAMBLE_B':\n                # Look for second\
+      \ preamble byte (0xFA)\n                if byte == 0xFA:\n                 \
+      \   self.state = 'PACKET_ID'\n                    self.buffer.clear()\n    \
+      \                self.bytes_received = 0\n                else:\n          \
+      \          # If it's not 0xFA, go back to searching for 0xFF\n             \
+      \       self.state = 'PREAMBLE_A'\n\n            elif self.state == 'PACKET_ID':\n\
+      \                self.packet_id = byte\n                print(f\"Packet ID:\
+      \ 0x{self.packet_id:02X}\")\n                self.state = 'LENGTH'\n\n     \
+      \       elif self.state == 'LENGTH':\n                self.length = byte\n \
+      \               print(f\"Received Length Byte: 0x{self.length:02X}\")\n    \
+      \            self.state = 'PAYLOAD'\n                self.buffer.clear()\n \
+      \               self.bytes_received = 0\n\n            elif self.state == 'PAYLOAD':\n\
+      \                self.buffer.append(byte)\n                self.bytes_received\
+      \ += 1\n                if self.bytes_received == self.length:\n           \
+      \         # We've received the full payload, next is CRC\n                 \
+      \   print(f\"Full Payload Received (Raw): {' '.join(f'{b:02x}' for b in self.buffer)}\"\
+      )\n                    self.state = 'CRC'\n\n            elif self.state ==\
+      \ 'CRC':\n                # Compute our local checksum\n                calculated_checksum\
+      \ = sum(self.buffer) & 0xFF\n                print(f\"Calculated Checksum: 0x{calculated_checksum:02X},\
+      \ Received Checksum: 0x{byte:02X}\")\n\n                if calculated_checksum\
+      \ == byte:\n                    # Packet ID recognized?\n                  \
+      \  if self.packet_id in capsule_info:\n                        (name, parser_fn,\
+      \ expected_size) = capsule_info[self.packet_id]\n\n                        #\
+      \ Check if the payload size matches what we expect\n                       \
+      \ if len(self.buffer) == expected_size:\n                            print(f\"\
+      Detected packet type: {name}\")\n                            parsed_data = parser_fn(bytes(self.buffer))\n\
+      \                            if parsed_data is not None:\n                 \
+      \               print(f\"Decoded {name} Packet: {parsed_data}\")\n         \
+      \                   else:\n                                print(f\"Failed to\
+      \ parse {name} data.\")\n                        else:\n                   \
+      \         print(f\"Unexpected payload size: {len(self.buffer)}. Expected: {expected_size}\"\
+      )\n                    else:\n                        # If no matching parser\
+      \ is found, skip\n                        print(f\"Unknown packet ID: 0x{self.packet_id:02X}.\
+      \ No parser available.\")\n                else:\n                    print(\"\
+      Checksum failed. Packet discarded.\")\n\n                # In any case, reset\
+      \ state for next packet\n                self.state = 'PREAMBLE_A'\n\n     \
+      \   return len(in0)\n"
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    _io_cache: ('Firehorn Packet Decoder', 'gse_downlink_decoder', [], [('0', 'byte',
+      1)], [], '\n    Example GNURadio block that detects Firehorn packets and\n    decodes
+      them based on the PacketDefinition.h structures.\n    ', [])
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [840, 344.0]
+    rotation: 0
+    state: enabled
+- name: epy_block_2
+  id: epy_block
+  parameters:
+    _source_code: "import numpy as np\nfrom gnuradio import gr\n\nclass byte_to_hex_list(gr.sync_block):\n\
+      \    \"\"\"\n    A Python Embedded Block that:\n    - Takes a stream of bytes\
+      \ (uint8) as input\n    - Converts them to a human-readable hex list\n    -\
+      \ Writes the list to a text file\n    \"\"\"\n\n    def __init__(self, file_path=\"\
+      C:/Users/nv7pr/Desktop/byte_list_output.txt\"):\n        # Use np.uint8 for\
+      \ the input to ensure correct data type interpretation\n        gr.sync_block.__init__(\n\
+      \            self,\n            name='all_communication_raw_log',\n        \
+      \    in_sig=[np.uint8],  \n            out_sig=[]\n        )\n\n        self.file_path\
+      \ = file_path\n        self.fh = open(self.file_path, \"a\")\n\n    def work(self,\
+      \ input_items, output_items):\n        in0 = input_items[0]  # This is a numpy\
+      \ array of dtype uint8\n\n        # Convert each byte to a hex string like '0x1f'\n\
+      \        hex_list = [\"0x{:02x}\".format(b) for b in in0]\n\n        # Create\
+      \ a string representation of the list\n        line = \"[\" + \",\".join(hex_list)\
+      \ + \"]\\n\"\n\n        # Write to file and flush\n        self.fh.write(line)\n\
+      \        self.fh.flush()\n\n        return len(in0)\n\n    def stop(self):\n\
+      \        # Close the file when the block stops\n        if self.fh:\n      \
+      \      self.fh.close()\n        return super().stop()\n"
+    affinity: ''
+    alias: ''
+    comment: ''
+    file_path: '"C:/Users/nv7pr/Desktop/byte_list_output.txt"'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+  states:
+    _io_cache: ('all_communication_raw_log', 'byte_to_hex_list', [('file_path', "'C:/Users/nv7pr/Desktop/byte_list_output.txt'")],
+      [('0', 'byte', 1)], [], '\n    A Python Embedded Block that:\n    - Takes a
+      stream of bytes (uint8) as input\n    - Converts them to a human-readable hex
+      list\n    - Writes the list to a text file\n    ', ['file_path'])
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [832, 144.0]
+    rotation: 0
+    state: enabled
+- name: lora_rx_0
+  id: lora_rx
+  parameters:
+    affinity: ''
+    alias: ''
+    bw: '125000'
+    comment: ''
+    cr: '1'
+    has_crc: 'True'
+    impl_head: 'False'
+    ldro: '2'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    pay_len: '255'
+    print_rx: '[True,True]'
+    samp_rate: int(samp_rate)
+    sf: '7'
+    soft_decoding: 'True'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [544, 192.0]
+    rotation: 0
+    state: enabled
+- name: qtgui_waterfall_sink_x_0
+  id: qtgui_waterfall_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    axislabels: 'True'
+    bw: 125e3
+    color1: '0'
+    color10: '0'
+    color2: '0'
+    color3: '0'
+    color4: '0'
+    color5: '0'
+    color6: '0'
+    color7: '0'
+    color8: '0'
+    color9: '0'
+    comment: ''
+    fc: 915e6
+    fftsize: '16384'
+    freqhalf: 'True'
+    grid: 'False'
+    gui_hint: ''
+    int_max: '10'
+    int_min: '-140'
+    label1: ''
+    label10: ''
+    label2: ''
+    label3: ''
+    label4: ''
+    label5: ''
+    label6: ''
+    label7: ''
+    label8: ''
+    label9: ''
+    legend: 'True'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    name: '""'
+    nconnections: '1'
+    showports: 'False'
+    type: complex
+    update_time: '0.0000010'
+    wintype: window.WIN_BLACKMAN_hARRIS
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [544, 28.0]
+    rotation: 0
+    state: enabled
+- name: rtlsdr_source_0
+  id: rtlsdr_source
+  parameters:
+    affinity: ''
+    alias: ''
+    ant0: ''
+    ant1: ''
+    ant10: ''
+    ant11: ''
+    ant12: ''
+    ant13: ''
+    ant14: ''
+    ant15: ''
+    ant16: ''
+    ant17: ''
+    ant18: ''
+    ant19: ''
+    ant2: ''
+    ant20: ''
+    ant21: ''
+    ant22: ''
+    ant23: ''
+    ant24: ''
+    ant25: ''
+    ant26: ''
+    ant27: ''
+    ant28: ''
+    ant29: ''
+    ant3: ''
+    ant30: ''
+    ant31: ''
+    ant4: ''
+    ant5: ''
+    ant6: ''
+    ant7: ''
+    ant8: ''
+    ant9: ''
+    args: '""'
+    bb_gain0: '20'
+    bb_gain1: '20'
+    bb_gain10: '20'
+    bb_gain11: '20'
+    bb_gain12: '20'
+    bb_gain13: '20'
+    bb_gain14: '20'
+    bb_gain15: '20'
+    bb_gain16: '20'
+    bb_gain17: '20'
+    bb_gain18: '20'
+    bb_gain19: '20'
+    bb_gain2: '20'
+    bb_gain20: '20'
+    bb_gain21: '20'
+    bb_gain22: '20'
+    bb_gain23: '20'
+    bb_gain24: '20'
+    bb_gain25: '20'
+    bb_gain26: '20'
+    bb_gain27: '20'
+    bb_gain28: '20'
+    bb_gain29: '20'
+    bb_gain3: '20'
+    bb_gain30: '20'
+    bb_gain31: '20'
+    bb_gain4: '20'
+    bb_gain5: '20'
+    bb_gain6: '20'
+    bb_gain7: '20'
+    bb_gain8: '20'
+    bb_gain9: '20'
+    bw0: 125e3
+    bw1: '0'
+    bw10: '0'
+    bw11: '0'
+    bw12: '0'
+    bw13: '0'
+    bw14: '0'
+    bw15: '0'
+    bw16: '0'
+    bw17: '0'
+    bw18: '0'
+    bw19: '0'
+    bw2: '0'
+    bw20: '0'
+    bw21: '0'
+    bw22: '0'
+    bw23: '0'
+    bw24: '0'
+    bw25: '0'
+    bw26: '0'
+    bw27: '0'
+    bw28: '0'
+    bw29: '0'
+    bw3: '0'
+    bw30: '0'
+    bw31: '0'
+    bw4: '0'
+    bw5: '0'
+    bw6: '0'
+    bw7: '0'
+    bw8: '0'
+    bw9: '0'
+    clock_source0: ''
+    clock_source1: ''
+    clock_source2: ''
+    clock_source3: ''
+    clock_source4: ''
+    clock_source5: ''
+    clock_source6: ''
+    clock_source7: ''
+    comment: ''
+    corr0: '0'
+    corr1: '0'
+    corr10: '0'
+    corr11: '0'
+    corr12: '0'
+    corr13: '0'
+    corr14: '0'
+    corr15: '0'
+    corr16: '0'
+    corr17: '0'
+    corr18: '0'
+    corr19: '0'
+    corr2: '0'
+    corr20: '0'
+    corr21: '0'
+    corr22: '0'
+    corr23: '0'
+    corr24: '0'
+    corr25: '0'
+    corr26: '0'
+    corr27: '0'
+    corr28: '0'
+    corr29: '0'
+    corr3: '0'
+    corr30: '0'
+    corr31: '0'
+    corr4: '0'
+    corr5: '0'
+    corr6: '0'
+    corr7: '0'
+    corr8: '0'
+    corr9: '0'
+    dc_offset_mode0: '0'
+    dc_offset_mode1: '0'
+    dc_offset_mode10: '0'
+    dc_offset_mode11: '0'
+    dc_offset_mode12: '0'
+    dc_offset_mode13: '0'
+    dc_offset_mode14: '0'
+    dc_offset_mode15: '0'
+    dc_offset_mode16: '0'
+    dc_offset_mode17: '0'
+    dc_offset_mode18: '0'
+    dc_offset_mode19: '0'
+    dc_offset_mode2: '0'
+    dc_offset_mode20: '0'
+    dc_offset_mode21: '0'
+    dc_offset_mode22: '0'
+    dc_offset_mode23: '0'
+    dc_offset_mode24: '0'
+    dc_offset_mode25: '0'
+    dc_offset_mode26: '0'
+    dc_offset_mode27: '0'
+    dc_offset_mode28: '0'
+    dc_offset_mode29: '0'
+    dc_offset_mode3: '0'
+    dc_offset_mode30: '0'
+    dc_offset_mode31: '0'
+    dc_offset_mode4: '0'
+    dc_offset_mode5: '0'
+    dc_offset_mode6: '0'
+    dc_offset_mode7: '0'
+    dc_offset_mode8: '0'
+    dc_offset_mode9: '0'
+    freq0: 915e6
+    freq1: 100e6
+    freq10: 100e6
+    freq11: 100e6
+    freq12: 100e6
+    freq13: 100e6
+    freq14: 100e6
+    freq15: 100e6
+    freq16: 100e6
+    freq17: 100e6
+    freq18: 100e6
+    freq19: 100e6
+    freq2: 100e6
+    freq20: 100e6
+    freq21: 100e6
+    freq22: 100e6
+    freq23: 100e6
+    freq24: 100e6
+    freq25: 100e6
+    freq26: 100e6
+    freq27: 100e6
+    freq28: 100e6
+    freq29: 100e6
+    freq3: 100e6
+    freq30: 100e6
+    freq31: 100e6
+    freq4: 100e6
+    freq5: 100e6
+    freq6: 100e6
+    freq7: 100e6
+    freq8: 100e6
+    freq9: 100e6
+    gain0: '10'
+    gain1: '10'
+    gain10: '10'
+    gain11: '10'
+    gain12: '10'
+    gain13: '10'
+    gain14: '10'
+    gain15: '10'
+    gain16: '10'
+    gain17: '10'
+    gain18: '10'
+    gain19: '10'
+    gain2: '10'
+    gain20: '10'
+    gain21: '10'
+    gain22: '10'
+    gain23: '10'
+    gain24: '10'
+    gain25: '10'
+    gain26: '10'
+    gain27: '10'
+    gain28: '10'
+    gain29: '10'
+    gain3: '10'
+    gain30: '10'
+    gain31: '10'
+    gain4: '10'
+    gain5: '10'
+    gain6: '10'
+    gain7: '10'
+    gain8: '10'
+    gain9: '10'
+    gain_mode0: 'False'
+    gain_mode1: 'False'
+    gain_mode10: 'False'
+    gain_mode11: 'False'
+    gain_mode12: 'False'
+    gain_mode13: 'False'
+    gain_mode14: 'False'
+    gain_mode15: 'False'
+    gain_mode16: 'False'
+    gain_mode17: 'False'
+    gain_mode18: 'False'
+    gain_mode19: 'False'
+    gain_mode2: 'False'
+    gain_mode20: 'False'
+    gain_mode21: 'False'
+    gain_mode22: 'False'
+    gain_mode23: 'False'
+    gain_mode24: 'False'
+    gain_mode25: 'False'
+    gain_mode26: 'False'
+    gain_mode27: 'False'
+    gain_mode28: 'False'
+    gain_mode29: 'False'
+    gain_mode3: 'False'
+    gain_mode30: 'False'
+    gain_mode31: 'False'
+    gain_mode4: 'False'
+    gain_mode5: 'False'
+    gain_mode6: 'False'
+    gain_mode7: 'False'
+    gain_mode8: 'False'
+    gain_mode9: 'False'
+    if_gain0: '20'
+    if_gain1: '20'
+    if_gain10: '20'
+    if_gain11: '20'
+    if_gain12: '20'
+    if_gain13: '20'
+    if_gain14: '20'
+    if_gain15: '20'
+    if_gain16: '20'
+    if_gain17: '20'
+    if_gain18: '20'
+    if_gain19: '20'
+    if_gain2: '20'
+    if_gain20: '20'
+    if_gain21: '20'
+    if_gain22: '20'
+    if_gain23: '20'
+    if_gain24: '20'
+    if_gain25: '20'
+    if_gain26: '20'
+    if_gain27: '20'
+    if_gain28: '20'
+    if_gain29: '20'
+    if_gain3: '20'
+    if_gain30: '20'
+    if_gain31: '20'
+    if_gain4: '20'
+    if_gain5: '20'
+    if_gain6: '20'
+    if_gain7: '20'
+    if_gain8: '20'
+    if_gain9: '20'
+    iq_balance_mode0: '0'
+    iq_balance_mode1: '0'
+    iq_balance_mode10: '0'
+    iq_balance_mode11: '0'
+    iq_balance_mode12: '0'
+    iq_balance_mode13: '0'
+    iq_balance_mode14: '0'
+    iq_balance_mode15: '0'
+    iq_balance_mode16: '0'
+    iq_balance_mode17: '0'
+    iq_balance_mode18: '0'
+    iq_balance_mode19: '0'
+    iq_balance_mode2: '0'
+    iq_balance_mode20: '0'
+    iq_balance_mode21: '0'
+    iq_balance_mode22: '0'
+    iq_balance_mode23: '0'
+    iq_balance_mode24: '0'
+    iq_balance_mode25: '0'
+    iq_balance_mode26: '0'
+    iq_balance_mode27: '0'
+    iq_balance_mode28: '0'
+    iq_balance_mode29: '0'
+    iq_balance_mode3: '0'
+    iq_balance_mode30: '0'
+    iq_balance_mode31: '0'
+    iq_balance_mode4: '0'
+    iq_balance_mode5: '0'
+    iq_balance_mode6: '0'
+    iq_balance_mode7: '0'
+    iq_balance_mode8: '0'
+    iq_balance_mode9: '0'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    nchan: '1'
+    num_mboards: '1'
+    sample_rate: samp_rate
+    sync: sync
+    time_source0: ''
+    time_source1: ''
+    time_source2: ''
+    time_source3: ''
+    time_source4: ''
+    time_source5: ''
+    time_source6: ''
+    time_source7: ''
+    type: fc32
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [224, 32.0]
+    rotation: 0
+    state: enabled
+
+connections:
+- [lora_rx_0, '0', epy_block_0, '0']
+- [lora_rx_0, '0', epy_block_2, '0']
+- [rtlsdr_source_0, '0', lora_rx_0, '0']
+- [rtlsdr_source_0, '0', qtgui_waterfall_sink_x_0, '0']
+
+metadata:
+  file_format: 1
+  grc_version: 3.10.10.0
