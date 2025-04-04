@@ -15,17 +15,24 @@ static unsigned long lastPacketSent = 0;
 // -----------------------------------------------------------------------------
 // 1) CONFIGURATION: toggles and intervals
 // -----------------------------------------------------------------------------
-bool send_gse_down        = true;  // Enable/disable GSE Downlink
+bool send_gse_cmd_status  = false;  // Enable/disable GSE Command Status
+bool send_gse_down        = false;  // Enable/disable GSE Downlink
+bool send_av_engine_state = false;  // Enable/disable AV Engine State
 bool send_av_up           = true;  // Enable/disable AV Uplink
 bool send_av_down         = true;  // Enable/disable AV Downlink
 
 // Sending intervals (ms)
+unsigned long interval_gse_cmd_status = 1000;
 unsigned long interval_gse_down    = 2000;
+unsigned long interval_av_engine_state = 3000;
 unsigned long interval_av_up   = 3000;
 unsigned long interval_av_down = 6000;
 
+
 // Last time each packet type was sent
+unsigned long last_gse_cmd_status_sent = 0;
 unsigned long last_gse_down_sent    = 0;
+unsigned long last_av_engine_state_sent = 0;
 unsigned long last_av_up_sent   = 0;
 unsigned long last_av_down_sent = 0;
 //------------------------------------------------------------------------------
@@ -75,6 +82,11 @@ void loop() {
   //-------------------------------------------------------------------------
   // (A) GSE Downlink
   //-------------------------------------------------------------------------
+  if (send_gse_cmd_status && (now - last_gse_cmd_status_sent >= interval_gse_cmd_status)) {
+    last_gse_cmd_status_sent = now;
+    sendPacket(0x02, &gse_cmd_status_packet, sizeof(GSE_cmd_status), "GSE Command Status");
+  }
+
   if (send_gse_down && (now - last_gse_down_sent >= interval_gse_down)) {
     last_gse_down_sent = now;
     sendPacket(0x01, &gse_down_packet, sizeof(PacketGSE_downlink), "GSE Downlink");
@@ -83,6 +95,11 @@ void loop() {
   //-------------------------------------------------------------------------
   // (B) AV Uplink (Example: "ignition" command)
   //-------------------------------------------------------------------------
+  if (send_av_engine_state && (now - last_av_engine_state_sent >= interval_av_engine_state)) {
+    last_av_engine_state_sent = now;
+    sendPacket(0x0B, &av_engine_state_down_packet, sizeof(engine_state_t), "AV Engine State");
+  }
+
   if (send_av_up && (now - last_av_up_sent >= interval_av_up)) {
     last_av_up_sent = now;
     sendPacket(0x0A, &av_up_packet, sizeof(av_uplink_t), "AV Uplink");
