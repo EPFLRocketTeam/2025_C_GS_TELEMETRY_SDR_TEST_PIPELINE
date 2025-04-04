@@ -4,6 +4,13 @@
 
 // Configuration of the different test packets
 
+/////////////////////////////////////////////////////////////////
+// ----------------------- GSE PACKETS ----------------------- //
+/////////////////////////////////////////////////////////////////
+GSE_cmd_status gse_cmd_status_packet = {
+    .fillingN2O = 1,
+    .vent = 0
+};
 
 PacketGSE_downlink gse_down_packet = {
     .tankPressure = 101.3f,
@@ -15,6 +22,19 @@ PacketGSE_downlink gse_down_packet = {
     },
     .disconnectActive = true,
     .loadcellRaw = 12345
+};
+
+/////////////////////////////////////////////////////////////////
+// ---------------------- AV PACKETS ------------------------  // 
+/////////////////////////////////////////////////////////////////
+
+engine_state_t av_engine_state_down_packet = {
+    .igniter_LOX = 1,
+    .igniter_fuel = 0,
+    .main_LOX = 1,
+    .main_fuel = 1,
+    .vent_LOX = 0,
+    .vent_fuel = 1
 };
 
 av_uplink_t av_up_packet = {
@@ -50,7 +70,10 @@ av_downlink_t av_down_packet = {
     .av_state = 3
 };
 
+
 // Utilisée dans le main.cpp
-extern PacketGSE_downlink gse_down_packet;
+extern engine_state_t av_engine_state_down_packet;
 extern av_uplink_t av_up_packet;
 extern av_downlink_t av_down_packet;
+extern GSE_cmd_status gse_cmd_status_packet;
+extern PacketGSE_downlink gse_down_packet;
